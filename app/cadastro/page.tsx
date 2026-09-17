@@ -14,7 +14,9 @@ export default function Cadastro() {
   const [mensagem, setMensagem] = useState("");
   const [carregando, setCarregando] = useState(false);
 
-  async function handleCadastro(e: React.FormEvent<HTMLFormElement>) {
+  async function handleCadastro(
+    e: React.FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
 
     setMensagem("");
@@ -41,7 +43,7 @@ export default function Cadastro() {
       password: senha,
       options: {
         data: {
-          nome: nome,
+          nome,
         },
       },
     });
@@ -61,7 +63,6 @@ export default function Cadastro() {
   return (
     <main className="min-h-screen bg-zinc-950 text-white flex items-center justify-center px-4">
       <section className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
-
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold">
             Criar conta
@@ -72,8 +73,10 @@ export default function Cadastro() {
           </p>
         </div>
 
-        <form onSubmit={handleCadastro} className="space-y-5">
-
+        <form
+          onSubmit={handleCadastro}
+          className="space-y-5"
+        >
           <div>
             <label className="block text-sm font-medium mb-2">
               Nome completo
@@ -124,7 +127,9 @@ export default function Cadastro() {
             <input
               type="password"
               value={confirmarSenha}
-              onChange={(e) => setConfirmarSenha(e.target.value)}
+              onChange={(e) =>
+                setConfirmarSenha(e.target.value)
+              }
               placeholder="Digite a senha novamente"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 outline-none focus:border-white"
             />
@@ -141,9 +146,10 @@ export default function Cadastro() {
             disabled={carregando}
             className="w-full bg-white text-black font-semibold py-3 rounded-lg hover:bg-zinc-200 transition disabled:opacity-50"
           >
-            {carregando ? "Criando conta..." : "Criar conta"}
+            {carregando
+              ? "Criando conta..."
+              : "Criar conta"}
           </button>
-
         </form>
 
         <div className="text-center mt-6">
@@ -158,7 +164,6 @@ export default function Cadastro() {
             Voltar para o login
           </a>
         </div>
-
       </section>
     </main>
   );
