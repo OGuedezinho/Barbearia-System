@@ -133,3 +133,40 @@ drop trigger if exists trg_pagamento_agendamento_concluido on public.agendamento
 create trigger trg_pagamento_agendamento_concluido after update of status on public.agendamentos for each row execute function public.registrar_pagamento_agendamento_concluido();
 
 alter table public.barbearias add column if not exists mensagem_confirmacao text;
+
+
+-- Permite que um usuário autenticado crie a própria barbearia.
+-- O owner_id obrigatoriamente precisa ser o usuário da sessão.
+alter table public.barbearias enable row level security;
+
+drop policy if exists "barbearias_insert_owner" on public.barbearias;
+create policy "barbearias_insert_owner"
+on public.barbearias
+for insert
+to authenticated
+with check (owner_id = auth.uid());
+
+drop policy if exists "barbearias_select_owner_or_member" on public.barbearias;
+create policy "barbearias_select_owner_or_member"
+on public.barbearias
+for select
+to authenticated
+using (
+  owner_id = auth.uid()
+  or public.usuario_membro_barbearia(id, auth.uid())
+);
+
+drop policy if exists "barbearias_update_owner" on public.barbearias;
+create policy "barbearias_update_owner"
+on public.barbearias
+for update
+to authenticated
+using (owner_id = auth.uid())
+with check (owner_id = auth.uid());
+
+drop policy if exists "barbearias_delete_owner" on public.barbearias;
+create policy "barbearias_delete_owner"
+on public.barbearias
+for delete
+to authenticated
+using (owner_id = auth.uid());

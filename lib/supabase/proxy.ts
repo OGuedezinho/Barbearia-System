@@ -170,9 +170,12 @@ export async function updateSession(
 
   if (
     !claims &&
-    request.nextUrl.pathname.startsWith(
+    (request.nextUrl.pathname.startsWith(
       "/dashboard"
-    )
+    ) ||
+      request.nextUrl.pathname.startsWith(
+        "/criar-barbearia"
+      ))
   ) {
     const url =
       request.nextUrl.clone();

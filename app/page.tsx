@@ -160,7 +160,15 @@ export default function Login() {
 
     setSenha("");
 
-    router.push("/dashboard");
+    const pendencia = localStorage.getItem(
+      "barber-system-criar-barbearia"
+    );
+
+    if (pendencia) {
+      router.push("/criar-barbearia");
+    } else {
+      router.push("/dashboard");
+    }
   }
 
   return (
