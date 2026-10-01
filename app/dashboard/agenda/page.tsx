@@ -83,12 +83,24 @@ const [mensagemConfirmacao, setMensagemConfirmacao] = useState("");
   const [agendamentoSelecionado, setAgendamentoSelecionado] =
     useState<Agendamento | null>(null);
 
-  const [clienteId, setClienteId] = useState("");
-  const [tipoAtendimento, setTipoAtendimento] = useState<"avulso" | "plano">("avulso");
-  const [assinaturasPlano, setAssinaturasPlano] = useState<AssinaturaPlano[]>([]);
-  const [assinaturaPlanoId, setAssinaturaPlanoId] = useState("");
-  const [carregandoPlanosCliente, setCarregandoPlanosCliente] = useState(false);
+ const [clienteId, setClienteId] = useState("");
 
+const [modoAgendamento, setModoAgendamento] =
+  useState<"cliente" | "avulso">("cliente");
+
+const [tipoAtendimento, setTipoAtendimento] =
+  useState<"avulso" | "plano">("avulso");
+
+const [assinaturasPlano, setAssinaturasPlano] =
+  useState<AssinaturaPlano[]>([]);
+
+const [assinaturaPlanoId, setAssinaturaPlanoId] =
+  useState("");
+
+const [carregandoPlanosCliente, setCarregandoPlanosCliente] =
+  useState(false);
+
+  
   const [servicosSelecionados, setServicosSelecionados] =
     useState<string[]>([]);
 
@@ -927,12 +939,12 @@ if (idsServicos.length > 0) {
 
     setMensagem("");
 
-    if (!clienteId) {
-      setMensagem(
-        "Selecione um cliente."
-      );
-      return;
-    }
+  if (modoAgendamento === "cliente" && !clienteId) {
+  setMensagem(
+    "Selecione um cliente ou escolha Cliente avulso."
+  );
+  return;
+}
 
     if (
       servicosSelecionados.length ===
@@ -973,21 +985,22 @@ if (idsServicos.length > 0) {
       servicosSelecionados[0];
 
     const {
-      data: novoAgendamento,
-      error,
-    } = await supabase
-      .from("agendamentos")
-      .insert({
-        barbearia_id:
-          barbeariaId,
-        cliente_id:
-          clienteId,
-        servico_id:
-          primeiroServico,
-        data_hora:
-          dataHora.toISOString(),
-        status: "agendado",
-        origem: tipoAtendimento,
+  data: novoAgendamento,
+  error,
+} = await supabase
+  .from("agendamentos")
+  .insert({
+    barbearia_id: barbeariaId,
+
+    cliente_id:
+      tipoAtendimento === "avulso"
+        ? null
+        : clienteId || null,
+
+    servico_id: primeiroServico,
+    data_hora: dataHora.toISOString(),
+    status: "agendado",
+    origem: tipoAtendimento,
         assinatura_plano_id:
           tipoAtendimento === "plano"
             ? assinaturaPlanoId
@@ -2767,6 +2780,10 @@ if (idsServicos.length > 0) {
                   <option value="">
                     Selecione um cliente
                   </option>
+
+                  <option value="avulso">
+  Cliente avulso
+</option>
 
                   {clientes.map(
                     (cliente) => (
