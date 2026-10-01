@@ -89,7 +89,7 @@ const [modoAgendamento, setModoAgendamento] =
   useState<"cliente" | "avulso">("cliente");
 
 const [tipoAtendimento, setTipoAtendimento] =
-  useState<"avulso" | "plano">("avulso");
+  useState<"avulso" | "cliente" | "plano">("avulso");
 
 const [assinaturasPlano, setAssinaturasPlano] =
   useState<AssinaturaPlano[]>([]);
@@ -360,16 +360,30 @@ setMensagemConfirmacao(
     const supabase = createClient();
 
     const { data: agendamentosData, error } = await supabase
-      .from("agendamentos")
-      .select(
-        "id, data_hora, status, observacoes, cliente_id, servico_id, origem, assinatura_plano_id, plano_id"
-      )
-      .eq("barbearia_id", barbeariaId)
-      .gte("data_hora", inicio.toISOString())
-      .lt("data_hora", fim.toISOString())
-      .order("data_hora", {
-        ascending: true,
-      });
+  .from("agendamentos")
+  .select(`
+    id,
+    data_hora,
+    status,
+    observacoes,
+    cliente_id,
+    servico_id,
+    origem,
+    assinatura_plano_id,
+    plano_id,
+    clientes (
+      id,
+      nome,
+      telefone,
+      email
+    )
+  `)
+  .eq("barbearia_id", barbeariaId)
+  .gte("data_hora", inicio.toISOString())
+  .lt("data_hora", fim.toISOString())
+  .order("data_hora", {
+    ascending: true,
+  });
 
     if (error) {
       const erroCompleto = JSON.stringify(
@@ -398,12 +412,15 @@ setMensagemConfirmacao(
     }
 
     const idsClientes = [
-      ...new Set(
-        listaAgendamentos.map(
-          (item) => item.cliente_id
-        )
+  ...new Set(
+    listaAgendamentos
+      .map((item) => item.cliente_id)
+      .filter(
+        (id): id is string =>
+          Boolean(id)
       ),
-    ];
+  ),
+];
 
     const idsServicosAntigos = [
       ...new Set(
@@ -416,13 +433,32 @@ setMensagemConfirmacao(
       ),
     ];
 
-    const { data: clientesData } =
-      await supabase
-        .from("clientes")
-        .select(
-          "id, nome, telefone, email"
-        )
-        .in("id", idsClientes);
+   let clientesData: Cliente[] = [];
+
+if (idsClientes.length > 0) {
+  const {
+    data,
+    error: clientesError,
+  } = await supabase
+    .from("clientes")
+    .select(
+      "id, nome, telefone, email"
+    )
+    .in("id", idsClientes);
+
+  if (clientesError) {
+    console.error(
+      "ERRO AO BUSCAR CLIENTES DOS AGENDAMENTOS:",
+      JSON.stringify(
+        clientesError,
+        null,
+        2
+      )
+    );
+  } else {
+    clientesData = data ?? [];
+  }
+}
 
     /*
      * BUSCA SERVIÇOS DOS AGENDAMENTOS
@@ -612,7 +648,7 @@ if (idsServicos.length > 0) {
     }
 
     setClienteId("");
-    setTipoAtendimento("avulso");
+    setTipoAtendimento("plano");
     setAssinaturasPlano([]);
     setAssinaturaPlanoId("");
     setServicosSelecionados([]);
@@ -694,9 +730,13 @@ if (idsServicos.length > 0) {
     setAssinaturasPlano([]);
     setAssinaturaPlanoId("");
 
-    if (!clienteSelecionadoId || !barbeariaId) {
-      return;
-    }
+    if (
+  !clienteSelecionadoId ||
+  clienteSelecionadoId === "avulso" ||
+  !barbeariaId
+) {
+  return;
+}
 
     setCarregandoPlanosCliente(true);
 
@@ -989,34 +1029,33 @@ if (idsServicos.length > 0) {
   error,
 } = await supabase
   .from("agendamentos")
+  
   .insert({
     barbearia_id: barbeariaId,
-
-    cliente_id:
-      tipoAtendimento === "avulso"
-        ? null
-        : clienteId || null,
+    cliente_id: clienteId === "avulso" ? null : clienteId,
 
     servico_id: primeiroServico,
+
     data_hora: dataHora.toISOString(),
+
     status: "agendado",
+
     origem: tipoAtendimento,
-        assinatura_plano_id:
-          tipoAtendimento === "plano"
-            ? assinaturaPlanoId
-            : null,
-        plano_id:
-          tipoAtendimento === "plano"
-            ? assinaturaPlanoSelecionadaAtual()?.plano_id ?? null
-            : null,
-        observacoes:
-          observacoes.trim() ||
-          null,
-      })
-      .select(
-        "id"
-      )
-      .single();
+
+    assinatura_plano_id:
+      tipoAtendimento === "plano"
+        ? assinaturaPlanoId
+        : null,
+
+    plano_id:
+      tipoAtendimento === "plano"
+        ? assinaturaPlanoSelecionadaAtual()?.plano_id ?? null
+        : null,
+
+    observacoes: observacoes.trim() || null,
+  })
+  .select("id")
+  .single();
 
     if (error) {
       console.error(
@@ -2767,13 +2806,16 @@ if (idsServicos.length > 0) {
                 <select
                   value={clienteId}
                   onChange={(e) => {
-                    const novoClienteId = e.target.value;
-                    setClienteId(novoClienteId);
-                    setTipoAtendimento("avulso");
-                    setAssinaturaPlanoId("");
-                    setMensagem("");
-                    carregarPlanosDoCliente(novoClienteId);
-                  }}
+  const novoClienteId = e.target.value;
+
+  setClienteId(novoClienteId);
+  setAssinaturaPlanoId("");
+  setMensagem("");
+
+  if (novoClienteId !== "avulso") {
+    carregarPlanosDoCliente(novoClienteId);
+  }
+}}
                   className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 outline-none focus:border-white"
                 >
 

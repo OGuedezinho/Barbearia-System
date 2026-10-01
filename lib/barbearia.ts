@@ -1,5 +1,16 @@
 import { createClient } from "@/lib/supabase/client";
 
+export type TipoUsuario = "dono" | "membro";
+
+export type BarbeariaUsuario = {
+  id: string;
+  nome: string;
+  logo_url?: string | null;
+  cor_primaria?: string | null;
+  whatsapp?: string | null;
+  mensagem_confirmacao?: string | null;
+};
+
 export async function getBarbeariaDoUsuario() {
   const supabase = createClient();
 
@@ -8,34 +19,47 @@ export async function getBarbeariaDoUsuario() {
     error: erroUsuario,
   } = await supabase.auth.getUser();
 
-  if (erroUsuario || !user) {
+  if (erroUsuario) {
     return {
       barbearia: null,
-      user: null,
-      error:
-        erroUsuario ??
-        new Error("Usuário não autenticado."),
       tipoUsuario: null,
       cargo: null,
+      error: erroUsuario,
     };
   }
 
-  // ==========================================
+  if (!user) {
+    return {
+      barbearia: null,
+      tipoUsuario: null,
+      cargo: null,
+      error: new Error("Usuário não autenticado."),
+    };
+  }
+
+  // =====================================================
   // 1. VERIFICA SE É O DONO
-  // ==========================================
+  // =====================================================
 
   const {
     data: barbeariaDono,
     error: erroDono,
   } = await supabase
     .from("barbearias")
-    .select("*")
+    .select(`
+      id,
+      nome,
+      logo_url,
+      cor_primaria,
+      whatsapp,
+      mensagem_confirmacao
+    `)
     .eq("owner_id", user.id)
     .maybeSingle();
 
   if (erroDono) {
     console.error(
-      "ERRO AO BUSCAR BARBEARIA DO DONO:",
+      "Erro ao buscar barbearia do dono:",
       erroDono
     );
   }
@@ -43,99 +67,95 @@ export async function getBarbeariaDoUsuario() {
   if (barbeariaDono) {
     return {
       barbearia: barbeariaDono,
-      user,
-      error: null,
-      tipoUsuario: "dono" as const,
+      tipoUsuario: "dono" as TipoUsuario,
       cargo: "Administrador",
+      error: null,
     };
   }
 
-  // ==========================================
-  // 2. SE NÃO É DONO, PROCURA COMO MEMBRO
-  // ==========================================
+  // =====================================================
+  // 2. NÃO É DONO → PROCURA COMO MEMBRO
+  // =====================================================
 
   const {
     data: membro,
     error: erroMembro,
   } = await supabase
     .from("membros_barbearia")
-    .select(
-      "barbearia_id, cargo, ativo"
-    )
+    .select(`
+      barbearia_id,
+      cargo,
+      ativo
+    `)
     .eq("user_id", user.id)
     .eq("ativo", true)
     .maybeSingle();
 
   if (erroMembro) {
     console.error(
-      "ERRO AO BUSCAR MEMBRO:",
+      "Erro ao buscar membro da barbearia:",
       erroMembro
     );
 
     return {
       barbearia: null,
-      user,
-      error: erroMembro,
       tipoUsuario: null,
       cargo: null,
+      error: erroMembro,
     };
   }
 
   if (!membro) {
     return {
       barbearia: null,
-      user,
-      error: new Error(
-        "Usuário não está vinculado a nenhuma barbearia."
-      ),
       tipoUsuario: null,
       cargo: null,
+      error: new Error(
+        "Usuário não está vinculado a uma barbearia."
+      ),
     };
   }
 
-  // ==========================================
+  // =====================================================
   // 3. BUSCA A BARBEARIA DO MEMBRO
-  // ==========================================
+  // =====================================================
 
   const {
     data: barbeariaMembro,
     error: erroBarbearia,
   } = await supabase
     .from("barbearias")
-    .select("*")
-    .eq(
-      "id",
-      membro.barbearia_id
-    )
+    .select(`
+      id,
+      nome,
+      logo_url,
+      cor_primaria,
+      whatsapp,
+      mensagem_confirmacao
+    `)
+    .eq("id", membro.barbearia_id)
     .maybeSingle();
 
-  if (
-    erroBarbearia ||
-    !barbeariaMembro
-  ) {
+  if (erroBarbearia || !barbeariaMembro) {
     console.error(
-      "ERRO AO BUSCAR BARBEARIA DO MEMBRO:",
+      "Erro ao buscar barbearia do membro:",
       erroBarbearia
     );
 
     return {
       barbearia: null,
-      user,
+      tipoUsuario: "membro" as TipoUsuario,
+      cargo: membro.cargo || "Barbeiro",
       error:
-        erroBarbearia ??
-        new Error(
-          "Barbearia não encontrada."
-        ),
-      tipoUsuario: null,
-      cargo: membro.cargo,
+        erroBarbearia ||
+        new Error("Barbearia do membro não encontrada."),
     };
   }
 
   return {
     barbearia: barbeariaMembro,
-    user,
+    tipoUsuario: "membro" as TipoUsuario,
+    cargo: membro.cargo || "Barbeiro",
     error: null,
-    tipoUsuario: "membro" as const,
-    cargo: membro.cargo,
   };
 }
