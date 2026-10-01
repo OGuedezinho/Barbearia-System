@@ -5,10 +5,23 @@ export type TipoUsuario = "dono" | "membro";
 export type BarbeariaUsuario = {
   id: string;
   nome: string;
-  logo_url?: string | null;
-  cor_primaria?: string | null;
-  whatsapp?: string | null;
-  mensagem_confirmacao?: string | null;
+
+  logo_url: string | null;
+
+  cor_primaria: string | null;
+  cor_secundaria: string | null;
+
+  whatsapp: string | null;
+  mensagem_confirmacao: string | null;
+
+  endereco: string | null;
+  cidade: string | null;
+  estado: string | null;
+  cep: string | null;
+
+  descricao: string | null;
+
+  horarios_funcionamento: Record<string, unknown> | null;
 };
 
 export async function getBarbeariaDoUsuario() {
