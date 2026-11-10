@@ -41,21 +41,20 @@ type AssinaturaPlano = {
 };
 
 type Agendamento = {
+  origem?: string | null;
+assinatura_plano_id?: string | null;
+plano_id?: string | null;
   id: string;
   data_hora: string;
   status: string;
   observacoes: string | null;
-  cliente_id: string;
+  cliente_id: string | null;
+  cliente_nome: string | null;
   servico_id: string | null;
 
   cliente?: Cliente | null;
-
   servico?: Servico | null;
-
   agendamento_servicos?: AgendamentoServico[];
-  origem?: string | null;
-  assinatura_plano_id?: string | null;
-  plano_id?: string | null;
 };
 
 const HORA_INICIAL = 8;
@@ -83,7 +82,7 @@ const [mensagemConfirmacao, setMensagemConfirmacao] = useState("");
   const [agendamentoSelecionado, setAgendamentoSelecionado] =
     useState<Agendamento | null>(null);
 
- const [clienteId, setClienteId] = useState("");
+ const [clienteNome, setClienteNome] = useState("");
 
 const [modoAgendamento, setModoAgendamento] =
   useState<"cliente" | "avulso">("cliente");
@@ -362,22 +361,23 @@ setMensagemConfirmacao(
     const { data: agendamentosData, error } = await supabase
   .from("agendamentos")
   .select(`
+  id,
+  data_hora,
+  status,
+  observacoes,
+  cliente_id,
+  cliente_nome,
+  servico_id,
+  origem,
+  assinatura_plano_id,
+  plano_id,
+  clientes (
     id,
-    data_hora,
-    status,
-    observacoes,
-    cliente_id,
-    servico_id,
-    origem,
-    assinatura_plano_id,
-    plano_id,
-    clientes (
-      id,
-      nome,
-      telefone,
-      email
-    )
-  `)
+    nome,
+    telefone,
+    email
+  )
+`)
   .eq("barbearia_id", barbeariaId)
   .gte("data_hora", inicio.toISOString())
   .lt("data_hora", fim.toISOString())
@@ -647,7 +647,7 @@ if (idsServicos.length > 0) {
       setHora("");
     }
 
-    setClienteId("");
+    setClienteNome("");
     setTipoAtendimento("plano");
     setAssinaturasPlano([]);
     setAssinaturaPlanoId("");
@@ -686,15 +686,12 @@ if (idsServicos.length > 0) {
       )
     );
 
-    setTipoAtendimento(
-      agendamento.origem === "plano"
-        ? "plano"
-        : "avulso"
-    );
+    setClienteNome(
+  agendamento.cliente_nome ||
+  agendamento.cliente?.nome ||
+  ""
+);
 
-    setAssinaturaPlanoId(
-      agendamento.assinatura_plano_id || ""
-    );
 
     setServicosSelecionados(
       obterServicosDoAgendamento(
@@ -726,449 +723,89 @@ if (idsServicos.length > 0) {
     setAssinaturaPlanoId("");
   }
 
-  async function carregarPlanosDoCliente(clienteSelecionadoId: string) {
-    setAssinaturasPlano([]);
-    setAssinaturaPlanoId("");
 
-    if (
-  !clienteSelecionadoId ||
-  clienteSelecionadoId === "avulso" ||
-  !barbeariaId
+
+async function criarAgendamento(
+  e: React.FormEvent<HTMLFormElement>
 ) {
-  return;
-}
+  e.preventDefault();
+  setMensagem("");
 
-    setCarregandoPlanosCliente(true);
-
-    const supabase = createClient();
-
-    const { data: assinaturas, error: assinaturaError } =
-      await supabase
-        .from("assinaturas_planos")
-        .select(
-          "id, plano_id, data_vencimento, status"
-        )
-        .eq("barbearia_id", barbeariaId)
-        .eq("cliente_id", clienteSelecionadoId)
-        .in("status", ["ativo", "vencendo"])
-        .order("data_vencimento", {
-          ascending: true,
-          nullsFirst: false,
-        });
-
-    if (assinaturaError) {
-      console.error(
-        "ERRO AO BUSCAR PLANOS DO CLIENTE:",
-        JSON.stringify(assinaturaError, null, 2)
-      );
-      setCarregandoPlanosCliente(false);
-      return;
-    }
-
-    const assinaturasValidas = (assinaturas ?? []).filter((assinatura) => {
-      if (!assinatura.data_vencimento) {
-        return true;
-      }
-
-      const vencimento = new Date(
-        `${assinatura.data_vencimento}T23:59:59`
-      );
-
-      return vencimento >= new Date();
-    });
-
-    if (assinaturasValidas.length === 0) {
-      setCarregandoPlanosCliente(false);
-      return;
-    }
-
-    const idsPlanos = [
-      ...new Set(
-        assinaturasValidas.map((assinatura) => assinatura.plano_id)
-      ),
-    ];
-
-    const { data: planosData, error: planosError } =
-      await supabase
-        .from("planos")
-        .select("id, nome")
-        .in("id", idsPlanos);
-
-    if (planosError) {
-      console.error(
-        "ERRO AO BUSCAR NOMES DOS PLANOS:",
-        JSON.stringify(planosError, null, 2)
-      );
-      setCarregandoPlanosCliente(false);
-      return;
-    }
-
-    const { data: planoServicosData, error: planoServicosError } =
-      await supabase
-        .from("plano_servicos")
-        .select("plano_id, servico_id, quantidade")
-        .in("plano_id", idsPlanos);
-
-    if (planoServicosError) {
-      console.error(
-        "ERRO AO BUSCAR SERVIÇOS DOS PLANOS:",
-        JSON.stringify(planoServicosError, null, 2)
-      );
-      setCarregandoPlanosCliente(false);
-      return;
-    }
-
-    const idsAssinaturas = assinaturasValidas.map(
-      (assinatura) => assinatura.id
-    );
-
-    const { data: usosData, error: usosError } = await supabase
-      .from("usos_planos")
-      .select("assinatura_id, servico_id, quantidade")
-      .in("assinatura_id", idsAssinaturas);
-
-    if (usosError) {
-      console.error(
-        "ERRO AO BUSCAR UTILIZAÇÕES DOS PLANOS:",
-        JSON.stringify(usosError, null, 2)
-      );
-      setCarregandoPlanosCliente(false);
-      return;
-    }
-
-    const planosMap = new Map(
-      (planosData ?? []).map((plano) => [plano.id, plano.nome])
-    );
-
-    const assinaturasComPlanos: AssinaturaPlano[] = assinaturasValidas.map(
-      (assinatura) => {
-        const servicosDoPlano = (planoServicosData ?? []).filter(
-          (item) => item.plano_id === assinatura.plano_id
-        );
-
-        const servicos = servicosDoPlano.map((item) => {
-          const usado = (usosData ?? [])
-            .filter(
-              (uso) =>
-                uso.assinatura_id === assinatura.id &&
-                uso.servico_id === item.servico_id
-            )
-            .reduce(
-              (total, uso) => total + Number(uso.quantidade || 0),
-              0
-            );
-
-          const quantidade = Number(item.quantidade || 0);
-
-          return {
-            servico_id: item.servico_id,
-            quantidade,
-            usado,
-            restante: Math.max(0, quantidade - usado),
-          };
-        });
-
-        return {
-          id: assinatura.id,
-          plano_id: assinatura.plano_id,
-          plano_nome: planosMap.get(assinatura.plano_id) || "Plano",
-          data_vencimento: assinatura.data_vencimento,
-          status: assinatura.status,
-          servicos,
-        };
-      }
-    );
-
-    setAssinaturasPlano(assinaturasComPlanos);
-    setCarregandoPlanosCliente(false);
+  if (!clienteNome.trim()) {
+    setMensagem("Digite o nome do cliente.");
+    return;
   }
 
-  function assinaturaPlanoSelecionadaAtual() {
-    return assinaturasPlano.find(
-      (assinatura) => assinatura.id === assinaturaPlanoId
-    ) ?? null;
+  if (servicosSelecionados.length === 0) {
+    setMensagem("Selecione pelo menos um serviço.");
+    return;
   }
 
-  function servicoDisponivelNoPlano(servicoId: string) {
-    const assinatura = assinaturaPlanoSelecionadaAtual();
-
-    if (!assinatura) {
-      return null;
-    }
-
-    return (
-      assinatura.servicos.find(
-        (servico) => servico.servico_id === servicoId
-      ) ?? null
-    );
+  if (!data || !hora) {
+    setMensagem("Selecione a data e o horário.");
+    return;
   }
 
-  function validarServicosDoPlano() {
-    if (tipoAtendimento !== "plano") {
-      return true;
-    }
+  setSalvando(true);
 
-    if (!assinaturaPlanoId) {
-      setMensagem("Selecione o plano que será utilizado neste atendimento.");
-      return false;
-    }
+  const supabase = createClient();
 
-    if (servicosSelecionados.length === 0) {
-      setMensagem("Selecione pelo menos um serviço.");
-      return false;
-    }
+  const dataHora = new Date(`${data}T${hora}`);
 
-    for (const servicoId of servicosSelecionados) {
-      const item = servicoDisponivelNoPlano(servicoId);
+  const primeiroServico = servicosSelecionados[0];
 
-      if (!item) {
-        const servico = servicos.find(
-          (itemServico) => itemServico.id === servicoId
-        );
+  const { data: novoAgendamento, error } = await supabase
+    .from("agendamentos")
+    .insert({
+      barbearia_id: barbeariaId,
+      cliente_id: null,
+      cliente_nome: clienteNome.trim(),
+      servico_id: primeiroServico,
+      data_hora: dataHora.toISOString(),
+      status: "agendado",
+      observacoes: observacoes.trim() || null,
+    })
+    .select("id")
+    .single();
 
-        setMensagem(
-          `O serviço "${servico?.nome || "selecionado"}" não faz parte deste plano.`
-        );
-        return false;
-      }
-
-      if (item.restante <= 0) {
-        const servico = servicos.find(
-          (itemServico) => itemServico.id === servicoId
-        );
-
-        setMensagem(
-          `O serviço "${servico?.nome || "selecionado"}" não possui mais utilizações disponíveis neste plano.`
-        );
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  async function registrarUsosDoPlano(
-    agendamentoId: string,
-    assinaturaId: string
-  ) {
-    const supabase = createClient();
-
-    for (const servicoId of servicosSelecionados) {
-      const { error } = await supabase.rpc(
-        "registrar_uso_plano",
-        {
-          p_assinatura_id: assinaturaId,
-          p_agendamento_id: agendamentoId,
-          p_servico_id: servicoId,
-        }
-      );
-
-      if (error) {
-        throw new Error(
-          error.message ||
-            "Não foi possível descontar o serviço do plano."
-        );
-      }
-    }
-  }
-
-  async function criarAgendamento(
-    e: React.FormEvent<HTMLFormElement>
-  ) {
-    e.preventDefault();
-
-    setMensagem("");
-
-  if (modoAgendamento === "cliente" && !clienteId) {
-  setMensagem(
-    "Selecione um cliente ou escolha Cliente avulso."
-  );
-  return;
-}
-
-    if (
-      servicosSelecionados.length ===
-      0
-    ) {
-      setMensagem(
-        "Selecione pelo menos um serviço."
-      );
-      return;
-    }
-
-    if (!data || !hora) {
-      setMensagem(
-        "Selecione a data e o horário."
-      );
-      return;
-    }
-
-    if (!validarServicosDoPlano()) {
-      return;
-    }
-
-    setSalvando(true);
-
-    const supabase = createClient();
-
-    const dataHora = new Date(
-      `${data}T${hora}`
-    );
-
-    /*
-     * MANTEMOS O PRIMEIRO SERVIÇO
-     * NO servico_id ANTIGO PARA
-     * COMPATIBILIDADE COM O SISTEMA.
-     */
-
-    const primeiroServico =
-      servicosSelecionados[0];
-
-    const {
-  data: novoAgendamento,
-  error,
-} = await supabase
-  .from("agendamentos")
-  
-  .insert({
-    barbearia_id: barbeariaId,
-    cliente_id: clienteId === "avulso" ? null : clienteId,
-
-    servico_id: primeiroServico,
-
-    data_hora: dataHora.toISOString(),
-
-    status: "agendado",
-
-    origem: tipoAtendimento,
-
-    assinatura_plano_id:
-      tipoAtendimento === "plano"
-        ? assinaturaPlanoId
-        : null,
-
-    plano_id:
-      tipoAtendimento === "plano"
-        ? assinaturaPlanoSelecionadaAtual()?.plano_id ?? null
-        : null,
-
-    observacoes: observacoes.trim() || null,
-  })
-  .select("id")
-  .single();
-
-    if (error) {
-      console.error(
-        "ERRO AO CRIAR AGENDAMENTO:",
-        JSON.stringify(
-          error,
-          null,
-          2
-        )
-      );
-
-      setMensagem(
-        "Não foi possível criar o agendamento."
-      );
-
-      setSalvando(false);
-      return;
-    }
-
-    /*
-     * CRIA OS SERVIÇOS RELACIONADOS
-     */
-
-    const registrosServicos =
-      servicosSelecionados.map(
-        (servicoId) => ({
-          agendamento_id:
-            novoAgendamento.id,
-          servico_id:
-            servicoId,
-        })
-      );
-
-    const {
-      error:
-        erroServicos,
-    } = await supabase
-      .from(
-        "agendamento_servicos"
-      )
-      .insert(
-        registrosServicos
-      );
-
-    if (erroServicos) {
-      console.error(
-        "ERRO AO VINCULAR SERVIÇOS:",
-        JSON.stringify(
-          erroServicos,
-          null,
-          2
-        )
-      );
-
-      /*
-       * Remove o agendamento caso
-       * não consiga salvar os serviços.
-       */
-
-      await supabase
-        .from("agendamentos")
-        .delete()
-        .eq(
-          "id",
-          novoAgendamento.id
-        );
-
-      setMensagem(
-        "Não foi possível salvar os serviços do atendimento."
-      );
-
-      setSalvando(false);
-      return;
-    }
-
-    if (
-      tipoAtendimento === "plano" &&
-      assinaturaPlanoId
-    ) {
-      try {
-        await registrarUsosDoPlano(
-          novoAgendamento.id,
-          assinaturaPlanoId
-        );
-      } catch (erroPlano) {
-        console.error(
-          "ERRO AO DESCONTAR UTILIZAÇÃO DO PLANO:",
-          erroPlano
-        );
-
-        await supabase
-          .from("agendamentos")
-          .delete()
-          .eq("id", novoAgendamento.id)
-          .eq("barbearia_id", barbeariaId);
-
-        setMensagem(
-          erroPlano instanceof Error
-            ? erroPlano.message
-            : "Não foi possível descontar o atendimento do plano."
-        );
-
-        setSalvando(false);
-        return;
-      }
-    }
-
-    setMostrarModal(false);
+  if (error) {
+    console.error("ERRO AO CRIAR AGENDAMENTO:", error);
+    setMensagem("Não foi possível criar o agendamento.");
     setSalvando(false);
-
-    await carregarAgendamentos();
+    return;
   }
 
+  const registrosServicos = servicosSelecionados.map(
+    (servicoId) => ({
+      agendamento_id: novoAgendamento.id,
+      servico_id: servicoId,
+    })
+  );
+
+  const { error: erroServicos } = await supabase
+    .from("agendamento_servicos")
+    .insert(registrosServicos);
+
+  if (erroServicos) {
+    console.error("ERRO AO VINCULAR SERVIÇOS:", erroServicos);
+
+    await supabase
+      .from("agendamentos")
+      .delete()
+      .eq("id", novoAgendamento.id);
+
+    setMensagem("Não foi possível salvar os serviços.");
+    setSalvando(false);
+    return;
+  }
+
+  setMostrarModal(false);
+  setSalvando(false);
+  setClienteNome("");
+  setServicosSelecionados([]);
+
+  await carregarAgendamentos();
+}
   async function salvarAlteracao() {
     if (!agendamentoSelecionado) {
       return;
@@ -1191,25 +828,6 @@ if (idsServicos.length > 0) {
       return;
     }
 
-    if (agendamentoSelecionado.origem === "plano") {
-      const servicosOriginais = obterServicosDoAgendamento(
-        agendamentoSelecionado
-      )
-        .map((servico) => servico.id)
-        .sort();
-
-      const servicosNovos = [...servicosSelecionados].sort();
-
-      if (
-        JSON.stringify(servicosOriginais) !==
-        JSON.stringify(servicosNovos)
-      ) {
-        setMensagem(
-          "Este atendimento foi marcado como uso de plano. Para evitar inconsistências no saldo, os serviços do plano não podem ser alterados nesta ficha."
-        );
-        return;
-      }
-    }
 
     setSalvando(true);
     setMensagem("");
@@ -1230,6 +848,7 @@ if (idsServicos.length > 0) {
     const { error } = await supabase
       .from("agendamentos")
       .update({
+        cliente_nome: clienteNome.trim(),
         data_hora:
           dataHora.toISOString(),
 
@@ -1238,13 +857,6 @@ if (idsServicos.length > 0) {
          */
         servico_id:
           primeiroServico,
-
-        origem:
-          agendamentoSelecionado.origem || "avulso",
-        assinatura_plano_id:
-          agendamentoSelecionado.assinatura_plano_id || null,
-        plano_id:
-          agendamentoSelecionado.plano_id || null,
 
         observacoes:
           observacoes.trim() ||
@@ -2653,17 +2265,12 @@ if (idsServicos.length > 0) {
                               </div>
 
                               <p className="font-semibold text-xs mt-1 truncate">
-                                {agendamento
-                                  .cliente
-                                  ?.nome ??
-                                  "Cliente"}
+                                {agendamento.cliente_nome ||
+  agendamento.cliente?.nome ||
+  "Cliente"}
                               </p>
 
-                              {agendamento.origem === "plano" && (
-                                <span className="inline-flex mt-1 text-[9px] bg-emerald-500/20 text-emerald-200 border border-emerald-400/20 px-1.5 py-0.5 rounded-full font-semibold">
-                                  🎫 NO PLANO
-                                </span>
-                              )}
+                              
 
                               <p className="text-[10px] opacity-90 truncate mt-0.5">
                                 ✂️{" "}
@@ -2797,190 +2404,24 @@ if (idsServicos.length > 0) {
 
               {/* CLIENTE */}
 
-              <div>
+<div>
+  <label className="block text-sm font-medium mb-2">
+    Nome do cliente
+  </label>
 
-                <label className="block text-sm font-medium mb-2">
-                  Cliente
-                </label>
+  <input
+    type="text"
+    value={clienteNome}
+    onChange={(e) => setClienteNome(e.target.value)}
+    placeholder="Digite o nome do cliente"
+    required
+    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 outline-none focus:border-white"
+  />
 
-                <select
-                  value={clienteId}
-                  onChange={(e) => {
-  const novoClienteId = e.target.value;
-
-  setClienteId(novoClienteId);
-  setAssinaturaPlanoId("");
-  setMensagem("");
-
-  if (novoClienteId !== "avulso") {
-    carregarPlanosDoCliente(novoClienteId);
-  }
-}}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 outline-none focus:border-white"
-                >
-
-                  <option value="">
-                    Selecione um cliente
-                  </option>
-
-                  <option value="avulso">
-  Cliente avulso
-</option>
-
-                  {clientes.map(
-                    (cliente) => (
-
-                      <option
-                        key={
-                          cliente.id
-                        }
-                        value={
-                          cliente.id
-                        }
-                      >
-                        {cliente.nome}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-              {/* TIPO DE ATENDIMENTO */}
-
-              {clienteId && (
-                <div>
-
-                  <label className="block text-sm font-medium mb-2">
-                    Tipo de atendimento
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTipoAtendimento("avulso");
-                        setAssinaturaPlanoId("");
-                        setMensagem("");
-                      }}
-                      className={`rounded-xl border p-3 text-left transition ${
-                        tipoAtendimento === "avulso"
-                          ? "border-white bg-white/10"
-                          : "border-zinc-800 bg-zinc-950 hover:bg-zinc-800"
-                      }`}
-                    >
-                      <p className="text-sm font-semibold">
-                        💳 Avulso
-                      </p>
-                      <p className="text-xs text-zinc-500 mt-1">
-                        Cobrar normalmente
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={
-                        carregandoPlanosCliente ||
-                        assinaturasPlano.length === 0
-                      }
-                      onClick={() => {
-                        if (assinaturasPlano.length === 0) {
-                          return;
-                        }
-
-                        setTipoAtendimento("plano");
-                        setAssinaturaPlanoId(
-                          assinaturasPlano[0].id
-                        );
-                        setMensagem("");
-                      }}
-                      className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                        tipoAtendimento === "plano"
-                          ? "border-emerald-500 bg-emerald-500/10"
-                          : "border-zinc-800 bg-zinc-950 hover:bg-zinc-800"
-                      }`}
-                    >
-                      <p className="text-sm font-semibold">
-                        🎫 No plano
-                      </p>
-                      <p className="text-xs text-zinc-500 mt-1">
-                        {carregandoPlanosCliente
-                          ? "Verificando plano..."
-                          : assinaturasPlano.length > 0
-                          ? "Usar uma utilização"
-                          : "Cliente sem plano ativo"}
-                      </p>
-                    </button>
-                  </div>
-
-                  {tipoAtendimento === "plano" && (
-                    <div className="mt-3 space-y-3">
-                      <select
-                        value={assinaturaPlanoId}
-                        onChange={(e) => {
-                          setAssinaturaPlanoId(e.target.value);
-                          setMensagem("");
-                        }}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 outline-none focus:border-white"
-                      >
-                        <option value="">
-                          Selecione o plano
-                        </option>
-
-                        {assinaturasPlano.map((assinatura) => (
-                          <option
-                            key={assinatura.id}
-                            value={assinatura.id}
-                          >
-                            {assinatura.plano_nome}
-                            {assinatura.data_vencimento
-                              ? ` — vence ${new Date(
-                                  `${assinatura.data_vencimento}T12:00:00`
-                                ).toLocaleDateString("pt-BR")}`
-                              : ""}
-                          </option>
-                        ))}
-                      </select>
-
-                      {assinaturaPlanoSelecionadaAtual() && (
-                        <div className="bg-emerald-950/20 border border-emerald-900/60 rounded-xl p-3">
-                          <p className="text-xs text-emerald-400 font-semibold">
-                            Utilizações disponíveis
-                          </p>
-
-                          <div className="mt-2 space-y-1">
-                            {assinaturaPlanoSelecionadaAtual()!.servicos.map(
-                              (item) => {
-                                const servico = servicos.find(
-                                  (servicoAtual) =>
-                                    servicoAtual.id === item.servico_id
-                                );
-
-                                return (
-                                  <div
-                                    key={item.servico_id}
-                                    className="flex items-center justify-between text-xs"
-                                  >
-                                    <span className="text-zinc-400">
-                                      {servico?.nome || "Serviço"}
-                                    </span>
-                                    <span className="text-zinc-200 font-semibold">
-                                      {item.restante}/{item.quantidade}
-                                    </span>
-                                  </div>
-                                );
-                              }
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
+  <p className="text-xs text-zinc-500 mt-2">
+    Não é necessário cadastrar o cliente previamente.
+  </p>
+</div>
               {/* SERVIÇOS */}
 
               <div>
